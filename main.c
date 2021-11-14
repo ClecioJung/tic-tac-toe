@@ -1,377 +1,286 @@
-/**
- ------------------------------------------------------------
-    BIBLIOTECAS
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * LIBRARIES
+ *------------------------------------------------------------------------------
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
 
-/**
- ------------------------------------------------------------
-    MACROS
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * DEFINITIONS
+ *------------------------------------------------------------------------------
+ */
 
-// Caracteres utilizados para representação do jogo
-#define XIS         'X'
-#define BOLA        'O'
-#define NULO        ' '
+// Marks
+#define CROSS 'X'
+#define NOUGHT 'O'
+#define EMPTY ' '
 
-// Número máximo de elementos
-#define MAX         3
+#define BOARD_SIZE 3
 
-// Definição das possiveis situações do jogo
 typedef enum
 {
-    jv_continua = -2,
-    jv_player_win = -1,
-    jv_bloqueado = 0,
-    jv_computador_win = 1,
-} jv_state;
+    ttt_continue = -2,
+    ttt_player_win = -1,
+    ttt_draw = 0,
+    ttt_computer_win = 1,
+} ttt_state;
 
-/**
- ------------------------------------------------------------
-    PROTÓTIPO DE FUNÇÕES
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * GLOBAL VARIABLES
+ *------------------------------------------------------------------------------
+ */
 
-void LimpaTela(void);
-void Imprime(void);
-void RecebeJogada(int jogador);
-jv_state JogoState(char tabela[MAX][MAX]);
-int Minimax(char tabela[MAX][MAX], int jogador);
-void ComputerMove(int jogador);
+char board[BOARD_SIZE][BOARD_SIZE];
 
-/**
- ------------------------------------------------------------
-    VARIÀVEIS GLOBAIS
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * FUNCTIONS
+ *------------------------------------------------------------------------------
+ */
 
-// Estrutura de dados utilizada para salvar informações do jogo
-char jogo[MAX][MAX];
-
-// Salva caracteres usados para representar os movimentos do jogo
-char player, computer;
-
-/**
- ------------------------------------------------------------
-    FUNÇÕES
- ------------------------------------------------------------
-**/
-
-// Limpa a tela e imprime cabeçalho
-void LimpaTela(void)
+char getReadableChar(void)
 {
-    system("cls");
-	
-	// Cabeçalho exibido na primeira linha da tela
-    printf(" Jogo da Velha:\n");
+    char c;
+    do
+    {
+        c = getc(stdin);
+    } while (c < 32);
+    fflush(stdin);
+    return c;
 }
 
-// Imprime o passo atual do jogo na tela
-void Imprime(void)
+void printBoard(void)
 {
-    // Variáveis locais
-    unsigned int linha, coluna;
-
-    // Limpa a Tela
-    LimpaTela();
-
-    // Imprime cabeçalho do jogo
-    printf(" Jogador: %c\n", player);
-    printf(" Computador: %c\n", computer);
     printf("\n    A   B   C\n");
-
-    // Imprime matriz do jogo
-    for (linha = 0; linha < MAX; linha++)
+    for (unsigned int line = 0; line < BOARD_SIZE; line++)
     {
-        printf(" %d:", (linha+1));
-
-        for (coluna = 0; coluna < MAX; coluna++)
+        printf(" %d:", (line + 1));
+        for (unsigned int col = 0; col < BOARD_SIZE; col++)
         {
-            printf(" %c ", jogo[linha][coluna]);
-            if (coluna != (MAX-1)) printf("|");
-        }
-        if (linha != (MAX-1)) printf("\n   -----------\n");
-    }
-}
-
-// Solicita que o jogador informe a sua próxima jogada
-void RecebeJogada(int jogador)
-{
-    // Variáveis locais
-    char cl, cc;
-    unsigned int linha, coluna;
-
-    if (jogador == -1)
-    {
-        // Ponto de retorno em caso de erro
-        for (;;)
-        {
-            // Solicita ao operador posição da próxima jogada
-            printf("\n\n Jogador: Em qual casa voce gostaria de jogar?\n\n ");
-            scanf("%c%c", &cc, &cl);
-            fflush(stdin);
-            cc = toupper(cc);
-            coluna = (unsigned int)(cc - 'A');
-            linha = (unsigned int)(cl - '1');
-
-            // Testa erros
-            if ((coluna < 0) || (coluna > (MAX-1)) ||
-                    (linha < 0) || (linha > (MAX-1)))
-                printf("\n Codigo inserido incorreto!");
-            else if (jogo[linha][coluna] != NULO)
-                printf("\n Esta casa ja se encontra ocupada!");
-            else
+            printf(" %c ", board[line][col]);
+            if (col != (BOARD_SIZE - 1))
             {
-                // Executa jogada
-                jogo[linha][coluna] = player;
-                break;
+                putchar('|');
             }
         }
+        if (line != (BOARD_SIZE - 1))
+        {
+            printf("\n   -----------\n");
+        }
     }
-    // Solicita jogada ao computador
-    else ComputerMove(jogador);
+    putchar('\n');
 }
 
-// Testa se o jogo já terminou
-jv_state JogoState(char tabela[MAX][MAX])
+void getPlayerMove(const char player)
 {
-    // Variáveis locais
-    unsigned int i, j;
-    unsigned int player_cont, computer_cont;
-    jv_state state = jv_bloqueado;
-
-    // Tabela de indices para combinações vitoriosas
-    static const unsigned int table_l[8][MAX] =
+    int line, col;
+getColumn:
+    printf("Which column would you like to mark? (A/B/C) ");
+    col = toupper(getReadableChar()) - 'A';
+    if ((col < 0) || (col > (BOARD_SIZE - 1)))
     {
-        {0, 1, 2}, {0, 1, 2}, {0, 1, 2}, {0, 0, 0},
-        {1, 1, 1}, {2, 2, 2}, {0, 1, 2}, {0, 1, 2},
-    };
-    static const unsigned int table_c[8][MAX] =
-    {
-        {0, 0, 0}, {1, 1, 1}, {2, 2, 2}, {0, 1, 2},
-        {0, 1, 2}, {0, 1, 2}, {0, 1, 2}, {2, 1, 0},
-    };
-
-    // Testa todas as condições
-    for (i = 0; i < 8; i++)
-    {
-        // Inicializa contador de elementos
-        player_cont = 0;
-        computer_cont = 0;
-
-        // Realiza contagem de elementos
-        for (j = 0; j < MAX; j++)
-        {
-            if (tabela[table_l[i][j]][table_c[i][j]] == player)
-                player_cont++;
-            else if (tabela[table_l[i][j]][table_c[i][j]] == computer)
-                computer_cont++;
-        }
-
-        // Tomada de decisão
-        if (player_cont == MAX) return jv_player_win;
-        else if (computer_cont == MAX) return jv_computador_win;
-        else if ((player_cont == 0) || (computer_cont == 0))
-            state = jv_continua;
+        printf("Incorrect column informed!\n");
+        goto getColumn;
     }
+getLine:
+    printf("Which line would you like to mark? (1/2/3) ");
+    line = getReadableChar() - '1';
+    if ((line < 0) || (line > (BOARD_SIZE - 1)))
+    {
+        printf("Incorrect line informed!\n");
+        goto getLine;
+    }
+    if (board[line][col] != EMPTY)
+    {
+        printf("This house is already occupied!\n");
+        goto getColumn;
+    }
+    board[line][col] = player;
+}
 
-    // Retorna condição atual do jogo
+ttt_state gameState(const char player, const char computer)
+{
+    ttt_state state = ttt_draw;
+    // Index tables for winning combinations
+    static const unsigned int lineWinning[8][BOARD_SIZE] =
+        {
+            {0, 1, 2},
+            {0, 1, 2},
+            {0, 1, 2},
+            {0, 0, 0},
+            {1, 1, 1},
+            {2, 2, 2},
+            {0, 1, 2},
+            {0, 1, 2},
+        };
+    static const unsigned int colWinning[8][BOARD_SIZE] =
+        {
+            {0, 0, 0},
+            {1, 1, 1},
+            {2, 2, 2},
+            {0, 1, 2},
+            {0, 1, 2},
+            {0, 1, 2},
+            {0, 1, 2},
+            {2, 1, 0},
+        };
+    for (unsigned int line = 0; line < 8; line++)
+    {
+        unsigned int player_cont = 0;
+        unsigned int computer_cont = 0;
+        for (unsigned int col = 0; col < BOARD_SIZE; col++)
+        {
+            if (board[lineWinning[line][col]][colWinning[line][col]] == player)
+            {
+                player_cont++;
+            }
+            else if (board[lineWinning[line][col]][colWinning[line][col]] == computer)
+            {
+                computer_cont++;
+            }
+        }
+        if (player_cont == BOARD_SIZE)
+        {
+            return ttt_player_win;
+        }
+        else if (computer_cont == BOARD_SIZE)
+        {
+            return ttt_computer_win;
+        }
+        else if ((player_cont == 0) || (computer_cont == 0))
+        {
+            state = ttt_continue;
+        }
+    }
     return state;
 }
 
-// Algoritmo Minimax
-int Minimax(char tabela[MAX][MAX], int jogador)
+int minimax(const int whoIsPlaying, const char player, const char computer)
 {
-    // Variáveis locais
-    unsigned int linha, coluna;
-    jv_state score, this_score;
-
-    // Avalia situação atual do jogo
-    score = JogoState(tabela);
-
-    /* Se é um nó final, retorna 1 para vitoria
-        do jogador e -1 para derota */
-    if (score != jv_continua)
-        return (jogador*score);
+    ttt_state score = gameState(player, computer);
+    // If the game has ended, returns 1 for player win and -1 for computer win
+    if (score != ttt_continue)
+    {
+        return (whoIsPlaying * score);
+    }
     else
     {
-        // Testa todas as condições
-        for (coluna = 0; coluna < MAX; coluna++)
+        for (unsigned int coluna = 0; coluna < BOARD_SIZE; coluna++)
         {
-            for (linha = 0; linha < MAX; linha++)
+            for (unsigned int linha = 0; linha < BOARD_SIZE; linha++)
             {
-                if (tabela[linha][coluna] == NULO)
+                if (board[linha][coluna] == EMPTY)
                 {
-                    // Se existe jogada possivel, então testa
-                    tabela[linha][coluna] = (jogador == 1 ? computer : player);
-
-                    // Encontra melhor jogada para o oponente e a inverte
-                    this_score = -Minimax(tabela, -jogador);
-
-                    // Retorna ao valor anterior
-                    tabela[linha][coluna] = NULO;
-
-                    // Testa se jogada é eficiente
-                    if (this_score > score) score = this_score;
+                    board[linha][coluna] = (whoIsPlaying == 1) ? computer : player;
+                    ttt_state thisScore = -minimax(-whoIsPlaying, player, computer);
+                    board[linha][coluna] = EMPTY;
+                    if (thisScore > score)
+                    {
+                        score = thisScore;
+                    }
                 }
             }
         }
     }
-
-    if (score == jv_continua) return jv_bloqueado;
+    if (score == ttt_continue)
+    {
+        return ttt_draw;
+    }
     return score;
 }
 
-// Efetua melhor jogada atraves do algoritmo Minimax
-void ComputerMove(int jogador)
+void getComputerMove(const int whoIsPlaying, const char player, const char computer)
 {
-    // Variáveis locais
-    unsigned int linha, coluna;
-    unsigned int mov_l, mov_c;
-    jv_state score = jv_continua, this_score;
-
-    // Testa todas as jogadas possiveis
-    for (coluna = 0; coluna < MAX; coluna++)
+    unsigned int moveLine, moveCol;
+    ttt_state score = ttt_continue;
+    for (unsigned int col = 0; col < BOARD_SIZE; col++)
     {
-        for (linha = 0; linha < MAX; linha++)
+        for (unsigned int line = 0; line < BOARD_SIZE; line++)
         {
-            if (jogo[linha][coluna] == NULO)
+            if (board[line][col] == EMPTY)
             {
-                // Se existe jogada possivel, então testa
-                jogo[linha][coluna] = (jogador == 1 ? computer : player);
-
-                // Encontra melhor jogada para o oponente e a inverte
-                this_score = -Minimax(jogo, -jogador);
-
-                // Retorna ao valor anterior
-                jogo[linha][coluna] = NULO;
-
-                // Testa se jogada é eficiente
-                if (this_score > score)
+                board[line][col] = (whoIsPlaying == 1) ? computer : player;
+                ttt_state thisScore = -minimax(-whoIsPlaying, player, computer);
+                board[line][col] = EMPTY;
+                if (thisScore > score)
                 {
-                    // Salva dados da jogada
-                    mov_l = linha;
-                    mov_c = coluna;
-                    score = this_score;
+                    moveLine = line;
+                    moveCol = col;
+                    score = thisScore;
                 }
             }
         }
     }
-
-    // Realiza a jogada
-    jogo[mov_l][mov_c] = computer;
+    printf("The computer will play at column %c and line %d\n", 'A' + (char)moveCol, moveLine + 1);
+    board[moveLine][moveCol] = computer;
 }
 
-/**
- ------------------------------------------------------------
-    MAIN
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * MAIN
+ *------------------------------------------------------------------------------
+ */
 
-int main ()
+int main(void)
 {
-    // Variáveis locais
-    unsigned int i, j;
-    unsigned int jogada;
-    int jogador;
-    jv_state state;
-    char aux;
+    ttt_state state = ttt_continue;
 
-    // Limpa a Tela
-    LimpaTela();
+    printf("Which character would you like to play? (X/O) ");
+    char player = getReadableChar();
+    char computer = (toupper(player) != CROSS) ? CROSS : NOUGHT;
 
-    // Fornece informações básicas sobre o jogo
-    printf("\n Para informar a casa em que voce deseja jogar, basta informar\n");
-    printf(" a letra da coluna, seguido pelo numero da linha, por exemplo: a1!\n");
-    printf("\n Bom jogo!\n\n ");
+    printf("Would you like to be the first to play? (Y/N) ");
+    int whoIsPlaying = (toupper(getReadableChar()) == 'Y') ? -1 : 1;
+    putchar('\n');
 
-    // Espera o usuário clicar uma tecla do teclado
-    system("pause");
+    printf("Player: %c\n", player);
+    printf("Computer: %c\n", computer);
 
-    // Limpa a Tela
-    LimpaTela();
+    memset(board, EMPTY, BOARD_SIZE * BOARD_SIZE);
+    printBoard();
 
-    // Pergunta qual caracter gostaria de usar
-    printf("\n Voce gostaria de jogar usando qual caracter? (X/O)\n\n ");
-    scanf("%c", &player);
-    fflush(stdin);
-    if ((player != XIS) && (player != tolower(XIS))) computer = XIS;
-    else computer = BOLA;
-
-    do
+    while (state == ttt_continue)
     {
-        // Inicializa as variaveis
-        jogada = 1;
-        for (i = 0; i < MAX; i++)
+        if (whoIsPlaying == -1)
         {
-            for (j = 0; j < MAX; j++) jogo[i][j] = NULO;
+            getPlayerMove(player);
         }
-
-        // Limpa a Tela
-        LimpaTela();
-
-        // Pergunta se o jogador gostaria de jogar por primeiro
-        printf("\n Voce gostaria de ser o primeiro a jogar? (Y/N)\n\n ");
-        scanf("%c", &aux);
-        fflush(stdin);
-        aux = toupper(aux);
-        if (aux == 'Y') jogador = -1;
-        else jogador = 1;
-
-        // Reatualiza a impressão da matriz na tela para o usuário
-        Imprime();
-
-        do
+        else
         {
-            // Solicita para que o usuário efetue uma jogada
-            RecebeJogada(jogador);
-
-            // Reatualiza a impressão da matriz na tela para o usuário
-            Imprime();
-
-            // Incrementa contador de jogadas
-            jogada++;
-
-            // Decide qual jogador executará a próxima jogada
-            jogador *= -1;
-
-            // Testa se existe conbinação valida, para então terminar o jogo
-            state = JogoState(jogo);
+            getComputerMove(whoIsPlaying, player, computer);
         }
-        while (state == jv_continua);
-
-        // Exibe o resultado do jogo
-        if (state == jv_player_win)
-            printf("\n\n Parabens! Voce ganhou!\n\n ");
-        else if (state == jv_computador_win)
-            printf("\n\n HAHAHA! Voce perdeu!\n\n ");
-        else printf("\n\n O jogo acabou em empate.\n\n ");
-
-        // Espera o usuário clicar uma tecla do teclado
-        system("pause");
-
-        // Limpa a Tela
-        LimpaTela();
-
-        // Pergunta se o usuario gostaria de jogar novamente
-        printf("\n Voce gostaria de jogar novamente? (Y/N)\n\n ");
-        scanf("%c", &aux);
-        fflush(stdin);
-        aux = toupper(aux);
+        printBoard();
+        whoIsPlaying *= -1;
+        state = gameState(player, computer);
     }
-    while (aux == 'Y');
 
-    // Encerra o programa
-    return 0;
+    switch (state)
+    {
+    case ttt_player_win:
+        printf("Congratulations! You Won!\n");
+        break;
+    case ttt_computer_win:
+        printf("You Lost! Good luck next time!\n");
+        break;
+    case ttt_draw:
+        printf("The game ended in a draw!\n");
+        break;
+    case ttt_continue:
+    default:
+        printf("This is probably a bug in this software!\n");
+        break;
+    }
+    return EXIT_SUCCESS;
 }
 
-/**
- ------------------------------------------------------------
-    FIM
- ------------------------------------------------------------
-**/
-
+/*
+ *------------------------------------------------------------------------------
+ * END
+ *------------------------------------------------------------------------------
+ */
